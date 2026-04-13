@@ -1,0 +1,12 @@
+## Interface: 120001
+## Title: CastbarGCDHud
+## Notes: HUD with radial cast bar and GCD ring indicators
+## Author: Yvairel
+## Version: 12.0.1-1
+## SavedVariables: CastbarGCDHudDB
+
+Core.lua
+RadialProgress.lua
+CastBar.lua
+GCDBar.lua
+Settings.lua
