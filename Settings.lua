@@ -75,6 +75,49 @@ local function CreateColorSettingInitializer(label, colorTable, onChanged)
 end
 
 ---------------------------------------------------------------------------
+-- Arc angle settings
+---------------------------------------------------------------------------
+local angleSettingUpdate = false
+
+local function CreateDegreeSlider(category, setting, limits, tooltip)
+    local opts = Settings.CreateSliderOptions(limits.min, limits.max, 1)
+    opts:SetLabelFormatter(MinimalSliderWithSteppersMixin.Label.Right, function(value)
+        return tostring(math.floor(value + 0.5)) .. " deg"
+    end)
+
+    Settings.CreateSlider(category, setting, opts, tooltip)
+end
+
+local function SetAngleSettingValue(variable, value)
+    local setting = Settings.GetSetting(variable)
+    if setting and setting:GetValue() ~= value then
+        angleSettingUpdate = true
+        Settings.SetValue(variable, value, true)
+        angleSettingUpdate = false
+    end
+end
+
+local function ClampArcSettings(db, defaults, limits, changedKey, pairedVariable)
+    local startAngle = NS:ClampAngle(db.startAngle, defaults.startAngle, limits)
+    local endAngle = NS:ClampAngle(db.endAngle, defaults.endAngle, limits)
+
+    if endAngle < startAngle then
+        if changedKey == "startAngle" then
+            endAngle = startAngle
+            db.endAngle = endAngle
+            SetAngleSettingValue(pairedVariable, endAngle)
+        else
+            startAngle = endAngle
+            db.startAngle = startAngle
+            SetAngleSettingValue(pairedVariable, startAngle)
+        end
+    else
+        db.startAngle = startAngle
+        db.endAngle = endAngle
+    end
+end
+
+---------------------------------------------------------------------------
 -- Live settings preview
 ---------------------------------------------------------------------------
 local PREVIEW_DURATION = 2.0
@@ -123,8 +166,18 @@ function NS:UpdateSettingsPreview()
 
     if elapsed >= PREVIEW_DURATION then
         self.castBar:Clear()
-        self.gcdBar:Clear()
         if self.latencyBar then self.latencyBar:Clear() end
+
+        local flashDuration = self.GCD_FLASH_DURATION or 0.12
+        if self.db.gcdBar.flashEnabled and elapsed < PREVIEW_DURATION + flashDuration then
+            self.gcdBar:ShowBackground()
+            self.gcdBar:SetFgColor(unpack(self.db.gcdBar.flashColor))
+            self.gcdBar:SetFull()
+        else
+            self.gcdBar:SetFgColor(unpack(self.db.gcdBar.color))
+            self.gcdBar:Clear()
+        end
+
         RestoreBackgroundVisibility()
 
         return
@@ -134,6 +187,7 @@ function NS:UpdateSettingsPreview()
 
     self.castBar:ShowBackground()
     self.gcdBar:ShowBackground()
+    self.gcdBar:SetFgColor(unpack(self.db.gcdBar.color))
     self.castBar:SetProgress(progress)
     self.gcdBar:SetProgress(progress)
     if self.latencyBar then self.latencyBar:SetProgressRange(1 - PREVIEW_LATENCY_RATIO, 1) end
@@ -162,7 +216,10 @@ function NS:StopSettingsPreview()
     self.settingsPreviewStartTime = nil
 
     if self.castBar then self.castBar:Clear() end
-    if self.gcdBar then self.gcdBar:Clear() end
+    if self.gcdBar then
+        self.gcdBar:SetFgColor(unpack(self.db.gcdBar.color))
+        self.gcdBar:Clear()
+    end
     if self.latencyBar then self.latencyBar:Clear() end
     RestoreBackgroundVisibility()
 end
@@ -239,6 +296,33 @@ function NS:InitSettings()
     layout:AddInitializer(CreateColorSettingInitializer("Background Color", NS.db.castBar.bgColor, rebuild))
     layout:AddInitializer(CreateColorSettingInitializer("Latency Color", NS.db.castBar.latencyColor, rebuild))
 
+    -- Arc angles
+    local castStartAngleSetting = Settings.RegisterAddOnSetting(
+        category, "CGH_castStartAngle", "startAngle", NS.db.castBar, "number", "Arc Start Degree", NS.DEFAULTS.castBar.startAngle
+    )
+    CreateDegreeSlider(category, castStartAngleSetting, NS.ARC_LIMITS.castBar, "Start degree for the cast bar arc")
+    Settings.SetOnValueChangedCallback("CGH_castStartAngle", function(_, _, newValue)
+        NS.db.castBar.startAngle = NS:ClampAngle(newValue, NS.DEFAULTS.castBar.startAngle, NS.ARC_LIMITS.castBar)
+        if angleSettingUpdate then return end
+
+        ClampArcSettings(NS.db.castBar, NS.DEFAULTS.castBar, NS.ARC_LIMITS.castBar, "startAngle", "CGH_castEndAngle")
+        rebuild()
+        NS:UpdateSettingsPreview()
+    end)
+
+    local castEndAngleSetting = Settings.RegisterAddOnSetting(
+        category, "CGH_castEndAngle", "endAngle", NS.db.castBar, "number", "Arc End Degree", NS.DEFAULTS.castBar.endAngle
+    )
+    CreateDegreeSlider(category, castEndAngleSetting, NS.ARC_LIMITS.castBar, "End degree for the cast bar arc")
+    Settings.SetOnValueChangedCallback("CGH_castEndAngle", function(_, _, newValue)
+        NS.db.castBar.endAngle = NS:ClampAngle(newValue, NS.DEFAULTS.castBar.endAngle, NS.ARC_LIMITS.castBar)
+        if angleSettingUpdate then return end
+
+        ClampArcSettings(NS.db.castBar, NS.DEFAULTS.castBar, NS.ARC_LIMITS.castBar, "endAngle", "CGH_castStartAngle")
+        rebuild()
+        NS:UpdateSettingsPreview()
+    end)
+
     -- Fill direction
     local castClockwiseSetting = Settings.RegisterAddOnSetting(
         category, "CGH_castClockwise", "clockwise", NS.db.castBar, "boolean", "Grow Clockwise", NS.DEFAULTS.castBar.clockwise
@@ -287,6 +371,57 @@ function NS:InitSettings()
 
     layout:AddInitializer(CreateColorSettingInitializer("GCD Foreground Color", NS.db.gcdBar.color, rebuild))
     layout:AddInitializer(CreateColorSettingInitializer("GCD Background Color", NS.db.gcdBar.bgColor, rebuild))
+    layout:AddInitializer(CreateColorSettingInitializer("GCD Flash Color", NS.db.gcdBar.flashColor, function()
+        if NS.gcdFlashActive and NS.gcdBar then
+            NS.gcdBar:SetFgColor(unpack(NS.db.gcdBar.flashColor))
+        end
+
+        NS:UpdateSettingsPreview()
+    end))
+
+    -- Arc angles
+    local gcdStartAngleSetting = Settings.RegisterAddOnSetting(
+        category, "CGH_gcdStartAngle", "startAngle", NS.db.gcdBar, "number", "Arc Start Degree", NS.DEFAULTS.gcdBar.startAngle
+    )
+    CreateDegreeSlider(category, gcdStartAngleSetting, NS.ARC_LIMITS.gcdBar, "Start degree for the GCD bar arc")
+    Settings.SetOnValueChangedCallback("CGH_gcdStartAngle", function(_, _, newValue)
+        NS.db.gcdBar.startAngle = NS:ClampAngle(newValue, NS.DEFAULTS.gcdBar.startAngle, NS.ARC_LIMITS.gcdBar)
+        if angleSettingUpdate then return end
+
+        ClampArcSettings(NS.db.gcdBar, NS.DEFAULTS.gcdBar, NS.ARC_LIMITS.gcdBar, "startAngle", "CGH_gcdEndAngle")
+        rebuild()
+        NS:UpdateSettingsPreview()
+    end)
+
+    local gcdEndAngleSetting = Settings.RegisterAddOnSetting(
+        category, "CGH_gcdEndAngle", "endAngle", NS.db.gcdBar, "number", "Arc End Degree", NS.DEFAULTS.gcdBar.endAngle
+    )
+    CreateDegreeSlider(category, gcdEndAngleSetting, NS.ARC_LIMITS.gcdBar, "End degree for the GCD bar arc")
+    Settings.SetOnValueChangedCallback("CGH_gcdEndAngle", function(_, _, newValue)
+        NS.db.gcdBar.endAngle = NS:ClampAngle(newValue, NS.DEFAULTS.gcdBar.endAngle, NS.ARC_LIMITS.gcdBar)
+        if angleSettingUpdate then return end
+
+        ClampArcSettings(NS.db.gcdBar, NS.DEFAULTS.gcdBar, NS.ARC_LIMITS.gcdBar, "endAngle", "CGH_gcdStartAngle")
+        rebuild()
+        NS:UpdateSettingsPreview()
+    end)
+
+    -- Flash
+    local gcdFlashSetting = Settings.RegisterAddOnSetting(
+        category, "CGH_gcdFlashEnabled", "flashEnabled", NS.db.gcdBar, "boolean",
+        "Flash When Finished", NS.DEFAULTS.gcdBar.flashEnabled
+    )
+    Settings.CreateCheckbox(category, gcdFlashSetting, "Show a brief solid-color flash when the GCD completes")
+    Settings.SetOnValueChangedCallback("CGH_gcdFlashEnabled", function(_, _, newValue)
+        NS.db.gcdBar.flashEnabled = newValue
+        if not newValue and NS.gcdFlashActive then
+            NS:CancelGCDFlash()
+            if NS.gcdBar then NS.gcdBar:Clear() end
+            RestoreBackgroundVisibility()
+        end
+
+        NS:UpdateSettingsPreview()
+    end)
 
     -- Fill direction
     local gcdClockwiseSetting = Settings.RegisterAddOnSetting(

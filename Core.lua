@@ -16,6 +16,8 @@ local DEFAULTS = {
         color = { 0.2, 0.6, 1.0, 1.0 },
         bgColor = { 0.3, 0.3, 0.3, 0.4 },
         latencyColor = { 0.8, 0.0, 0.0, 0.7 },
+        startAngle = 190,
+        endAngle = 350,
         clockwise = true,
         invert = false,
         bgAlwaysShow = true,
@@ -23,15 +25,55 @@ local DEFAULTS = {
     gcdBar = {
         color = { 0.5, 0.0, 0.0, 0.5 },
         bgColor = { 0.3, 0.3, 0.3, 0.4 },
+        flashColor = { 1.0, 1.0, 1.0, 1.0 },
+        flashEnabled = true,
+        startAngle = 10,
+        endAngle = 170,
         clockwise = true,
         invert = true, -- GCD starts full, empties
         bgAlwaysShow = true,
     },
 }
 NS.DEFAULTS = DEFAULTS
+NS.ARC_LIMITS = {
+    castBar = { min = 180, max = 360 },
+    gcdBar = { min = 0, max = 180 },
+}
 
 function NS:Print(msg)
     print(("|cff4fc3f7%s|r %s"):format(ADDON_NAME, msg))
+end
+
+function NS:IsSecretValue(value)
+    return type(issecretvalue) == "function" and issecretvalue(value)
+end
+
+function NS:ClampAngle(value, fallback, limits)
+    if type(value) ~= "number" then
+        value = fallback or 0
+    end
+
+    value = math.floor(value + 0.5)
+
+    if limits then
+        value = math.max(limits.min, math.min(limits.max, value))
+    end
+
+    return value
+end
+
+function NS:GetArcAngles(db, defaults, limits)
+    local startAngle = self:ClampAngle(db.startAngle, defaults.startAngle, limits)
+    local endAngle = self:ClampAngle(db.endAngle, defaults.endAngle, limits)
+
+    if endAngle < startAngle then
+        endAngle = startAngle
+    end
+
+    db.startAngle = startAngle
+    db.endAngle = endAngle
+
+    return startAngle, endAngle
 end
 
 -- Event dispatch
@@ -120,6 +162,11 @@ function NS:RebuildBars()
         NS.gcdTicker:Cancel()
         NS.gcdTicker = nil
     end
+    if NS.gcdFlashTimer then
+        NS.gcdFlashTimer:Cancel()
+        NS.gcdFlashTimer = nil
+    end
+    NS.gcdFlashActive = false
 
     -- Destroy old HUD
     if NS.hud then

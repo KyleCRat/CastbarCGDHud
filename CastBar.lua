@@ -4,6 +4,7 @@ local EVENT_HANDLERS = NS.EVENT_HANDLERS
 
 local castBar
 local latencyBar
+local ACTIVE_TICK_SECONDS = 0.02
 
 local function GetLatencySeconds()
     local _, _, _, latencyWorld = GetNetStats()
@@ -13,8 +14,7 @@ end
 
 function NS:CreateCastBar()
     local db = NS.db.castBar
-    local startAngle = 190
-    local endAngle = 350
+    local startAngle, endAngle = NS:GetArcAngles(db, NS.DEFAULTS.castBar, NS.ARC_LIMITS.castBar)
 
     castBar = NS:CreateRadialBar(NS.hud, startAngle, endAngle, db.color, db.bgColor)
     castBar.invert = db.invert
@@ -24,6 +24,7 @@ function NS:CreateCastBar()
     latencyBar = NS:CreateRadialBar(NS.hud, startAngle, endAngle, db.latencyColor, { 0, 0, 0, 0 })
     latencyBar.invert = db.invert
     latencyBar.clockwise = db.clockwise
+    latencyBar:SetFgDrawLayer("ARTWORK", -1)
     NS.latencyBar = latencyBar
 
     -- Hide bg if not always showing
@@ -50,6 +51,22 @@ end
 
 local casting = false
 local channeling = false
+
+function NS:IsCastBarActive()
+    return casting or channeling or NS.castTicker ~= nil
+end
+
+local function HasUsableCastTiming(startTimeMS, endTimeMS)
+    if not startTimeMS or not endTimeMS then
+        return false
+    end
+
+    if NS:IsSecretValue(startTimeMS) or NS:IsSecretValue(endTimeMS) then
+        return false
+    end
+
+    return endTimeMS > startTimeMS
+end
 
 local function ShowCastBg()
     if not NS.db.castBar.bgAlwaysShow then
@@ -88,7 +105,7 @@ end
 local function StartCastUpdate()
     if NS.castTicker then return end
     ShowCastBg()
-    NS.castTicker = C_Timer.NewTicker(0.02, function()
+    NS.castTicker = C_Timer.NewTicker(ACTIVE_TICK_SECONDS, function()
         NS:UpdateCastProgress()
     end)
 end
@@ -114,6 +131,12 @@ function NS:UpdateCastProgress()
             return
         end
 
+        if not HasUsableCastTiming(startTimeMS, endTimeMS) then
+            StopCastUpdate()
+
+            return
+        end
+
         local now = GetTime() * 1000
         local progress = (now - startTimeMS) / (endTimeMS - startTimeMS)
         castBar:SetProgress(math.max(0, math.min(1, progress)))
@@ -124,6 +147,12 @@ function NS:UpdateCastProgress()
     if channeling then
         local name, _, _, startTimeMS, endTimeMS = UnitChannelInfo("player")
         if not name then
+            StopCastUpdate()
+
+            return
+        end
+
+        if not HasUsableCastTiming(startTimeMS, endTimeMS) then
             StopCastUpdate()
 
             return
@@ -141,7 +170,7 @@ EVENT_HANDLERS["UNIT_SPELLCAST_START"] = function(self, unit)
     channeling = false
 
     local _, _, _, startTimeMS, endTimeMS = UnitCastingInfo("player")
-    if startTimeMS and endTimeMS then
+    if HasUsableCastTiming(startTimeMS, endTimeMS) then
         UpdateLatencyZone(endTimeMS - startTimeMS)
     end
 
@@ -154,7 +183,7 @@ EVENT_HANDLERS["UNIT_SPELLCAST_CHANNEL_START"] = function(self, unit)
     casting = false
 
     local _, _, _, startTimeMS, endTimeMS = UnitChannelInfo("player")
-    if startTimeMS and endTimeMS then
+    if HasUsableCastTiming(startTimeMS, endTimeMS) then
         UpdateLatencyZone(endTimeMS - startTimeMS)
     end
 

@@ -369,6 +369,10 @@ function NS:CreateRadialBar(parent, startAngle, endAngle, fgColor, bgColor, crop
         end
     end
 
+    function bar:SetFull()
+        updateCoords(self.fgCoords, self.startAngle, self.endAngle)
+    end
+
     function bar:ShowBackground()
         self.bgVisible = true
         updateCoords(self.bgCoords, self.startAngle, self.endAngle)
@@ -390,6 +394,18 @@ function NS:CreateRadialBar(parent, startAngle, endAngle, fgColor, bgColor, crop
     function bar:SetBgColor(r, g, b, a)
         for i = 1, 3 do
             self.bgTextures[i]:SetVertexColor(r, g, b, a)
+        end
+    end
+
+    function bar:SetFgDrawLayer(layer, subLevel)
+        for i = 1, 3 do
+            self.fgTextures[i]:SetDrawLayer(layer, subLevel)
+        end
+    end
+
+    function bar:SetBgDrawLayer(layer, subLevel)
+        for i = 1, 3 do
+            self.bgTextures[i]:SetDrawLayer(layer, subLevel)
         end
     end
 
