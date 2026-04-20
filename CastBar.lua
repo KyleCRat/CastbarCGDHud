@@ -51,6 +51,7 @@ end
 
 local casting = false
 local channeling = false
+local activeCastGUID = nil
 
 function NS:IsCastBarActive()
     return casting or channeling or NS.castTicker ~= nil
@@ -120,6 +121,7 @@ local function StopCastUpdate()
     HideCastBg()
     casting = false
     channeling = false
+    activeCastGUID = nil
 end
 
 function NS:UpdateCastProgress()
@@ -164,10 +166,11 @@ function NS:UpdateCastProgress()
     end
 end
 
-EVENT_HANDLERS["UNIT_SPELLCAST_START"] = function(self, unit)
+EVENT_HANDLERS["UNIT_SPELLCAST_START"] = function(self, unit, castGUID)
     if not IsPlayerUnit(unit) then return end
     casting = true
     channeling = false
+    activeCastGUID = castGUID
 
     local _, _, _, startTimeMS, endTimeMS = UnitCastingInfo("player")
     if HasUsableCastTiming(startTimeMS, endTimeMS) then
@@ -177,10 +180,11 @@ EVENT_HANDLERS["UNIT_SPELLCAST_START"] = function(self, unit)
     StartCastUpdate()
 end
 
-EVENT_HANDLERS["UNIT_SPELLCAST_CHANNEL_START"] = function(self, unit)
+EVENT_HANDLERS["UNIT_SPELLCAST_CHANNEL_START"] = function(self, unit, castGUID)
     if not IsPlayerUnit(unit) then return end
     channeling = true
     casting = false
+    activeCastGUID = castGUID
 
     local _, _, _, startTimeMS, endTimeMS = UnitChannelInfo("player")
     if HasUsableCastTiming(startTimeMS, endTimeMS) then
@@ -190,29 +194,29 @@ EVENT_HANDLERS["UNIT_SPELLCAST_CHANNEL_START"] = function(self, unit)
     StartCastUpdate()
 end
 
-EVENT_HANDLERS["UNIT_SPELLCAST_STOP"] = function(self, unit)
+EVENT_HANDLERS["UNIT_SPELLCAST_STOP"] = function(self, unit, castGUID)
     if not IsPlayerUnit(unit) then return end
-    if casting then StopCastUpdate() end
+    if casting and castGUID == activeCastGUID then StopCastUpdate() end
 end
 
-EVENT_HANDLERS["UNIT_SPELLCAST_CHANNEL_STOP"] = function(self, unit)
+EVENT_HANDLERS["UNIT_SPELLCAST_CHANNEL_STOP"] = function(self, unit, castGUID)
     if not IsPlayerUnit(unit) then return end
-    if channeling then StopCastUpdate() end
+    if channeling and castGUID == activeCastGUID then StopCastUpdate() end
 end
 
-EVENT_HANDLERS["UNIT_SPELLCAST_FAILED"] = function(self, unit)
+EVENT_HANDLERS["UNIT_SPELLCAST_FAILED"] = function(self, unit, castGUID)
     if not IsPlayerUnit(unit) then return end
-    StopCastUpdate()
+    if castGUID == activeCastGUID then StopCastUpdate() end
 end
 
-EVENT_HANDLERS["UNIT_SPELLCAST_INTERRUPTED"] = function(self, unit)
+EVENT_HANDLERS["UNIT_SPELLCAST_INTERRUPTED"] = function(self, unit, castGUID)
     if not IsPlayerUnit(unit) then return end
-    StopCastUpdate()
+    if castGUID == activeCastGUID then StopCastUpdate() end
 end
 
-EVENT_HANDLERS["UNIT_SPELLCAST_SUCCEEDED"] = function(self, unit)
+EVENT_HANDLERS["UNIT_SPELLCAST_SUCCEEDED"] = function(self, unit, castGUID)
     if not IsPlayerUnit(unit) then return end
-    if casting then StopCastUpdate() end
+    if casting and castGUID == activeCastGUID then StopCastUpdate() end
 end
 
 EVENT_HANDLERS["UNIT_SPELLCAST_DELAYED"] = function() end
