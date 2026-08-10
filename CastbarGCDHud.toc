@@ -2,7 +2,7 @@
 ## Title: CastbarGCDHud
 ## Notes: HUD with radial cast bar and GCD ring indicators
 ## Author: Yvairel
-## Version: 12.1.0-2
+## Version: 12.1.0-1
 ## SavedVariables: CastbarGCDHudDB
 
 Core.lua

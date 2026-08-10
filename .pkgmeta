@@ -1,0 +1,9 @@
+package-as: CastbarGCDHud
+
+manual-changelog:
+    filename: CHANGELOG.md
+    markup-type: markdown
+
+ignore:
+    - FIXME.md
+    - TODO.md
