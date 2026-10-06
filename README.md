@@ -2,7 +2,7 @@
 
 CastbarGCDHud is a World of Warcraft HUD that displays player casts and the global cooldown as configurable radial indicators.
 
-Current version: `12.1.0-1`
+Current version: `12.1.5-2`
 
 ## Features
 
@@ -27,4 +27,4 @@ The full `/castbargcdhud` command can be used in place of `/cgh`.
 
 ## Compatibility
 
-Supports retail World of Warcraft interface versions 12.0.7 and 12.1.0.
+Supports retail World of Warcraft 12.1.5.
